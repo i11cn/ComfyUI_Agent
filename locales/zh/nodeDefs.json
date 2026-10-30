@@ -1,0 +1,36 @@
+{
+  "SystemPromptSelector": {
+    "display_name": "系统提示词选择器",
+    "inputs": {
+      "preset": {
+        "label": "预设"
+      },
+      "text": {
+        "label": "文本"
+      }
+    }
+  },
+  "AgentChat": {
+    "display_name": "智能体对话",
+    "inputs": {
+      "new_conversation": {
+        "label": "新对话"
+      },
+      "prompt": {
+        "label": "提示词"
+      },
+      "system_prompt": {
+        "label": "系统提示词"
+      },
+      "skill": {
+        "label": "技能"
+      },
+      "provider": {
+        "label": "服务商"
+      },
+      "temperature": {
+        "label": "温度"
+      }
+    }
+  }
+}

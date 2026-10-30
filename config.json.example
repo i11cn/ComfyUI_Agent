@@ -1,0 +1,15 @@
+{
+  "default": "provider1",
+  "providers": {
+    "provider1": {
+      "base_url": "YOUR BASE_URL HERE",
+      "api_key": "YOUR API KEY",
+      "model": "YOUR MODEL ID"
+    },
+    "provider2": {
+      "base_url": "YOUR BASE_URL HERE",
+      "api_key": "YOUR API KEY",
+      "model": "YOUR MODEL ID"
+    }
+  }
+}
