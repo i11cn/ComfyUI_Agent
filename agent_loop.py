@@ -10,10 +10,6 @@ from PIL import Image
 
 TIMEOUT = 300
 VIDEO_FRAMES_PER_VIDEO = 4
-
-
-TIMEOUT = 300
-VIDEO_FRAMES_PER_VIDEO = 4
 MAX_IMAGE_SIDE = 1568  # VLM 友好的长边上限，超过则等比缩小
 JPEG_QUALITY = 88
 
@@ -25,11 +21,11 @@ def image_to_data_url(frame):
     if max(w, h) > MAX_IMAGE_SIDE:
         scale = MAX_IMAGE_SIDE / max(w, h)
         image = image.resize((max(1, round(w * scale)), max(1, round(h * scale))), Image.LANCZOS)
-        print("[llm_bridge] image downscaled {}x{} -> {}x{}".format(w, h, *image.size), flush=True)
+        print("[ComfyUI_Agent] image downscaled {}x{} -> {}x{}".format(w, h, *image.size), flush=True)
     buffer = io.BytesIO()
     image.save(buffer, format="JPEG", quality=JPEG_QUALITY)
     size_kb = len(buffer.getvalue()) / 1024
-    print("[llm_bridge] image payload {}x{}: {:.0f} KB".format(*image.size, size_kb), flush=True)
+    print("[ComfyUI_Agent] image payload {}x{}: {:.0f} KB".format(*image.size, size_kb), flush=True)
     return "data:image/jpeg;base64," + base64.b64encode(buffer.getvalue()).decode()
 
 
@@ -79,7 +75,7 @@ def chat(base_url, api_key, model, messages, temperature, status_cb=None):
     except (KeyError, IndexError) as e:
         raise RuntimeError("LLM API 响应缺少 choices/message 结构（endpoint={}）: {} | 原文: {}".format(
             base_url, e, json.dumps(data)[:300]))
-    print("[llm_bridge] finish_reason={} content_len={} reasoning_len={} tool_calls={}".format(
+    print("[ComfyUI_Agent] finish_reason={} content_len={} reasoning_len={} tool_calls={}".format(
         choice.get("finish_reason"), len(message.get("content") or ""),
         len(message.get("reasoning_content") or ""), bool(message.get("tool_calls"))), flush=True)
     content = message.get("content") or ""
@@ -91,14 +87,16 @@ def chat(base_url, api_key, model, messages, temperature, status_cb=None):
 
 def chat_with_tools(base_url, api_key, model, messages, temperature, tools, tool_executor, max_rounds=64, status_cb=None):
     """Agent Loop：模型可发起工具调用，tool_executor(name, arguments_dict) 执行后回传，
-    直到模型给出不含工具调用的最终回复；超过 max_rounds 轮抛出错误。"""
+    直到模型给出不含工具调用的最终回复；超过 max_rounds 轮抛出错误。
+    tools 可以是列表，也可以是 tools(round_no) -> list 的函数（按轮次动态提供）。"""
     for round_no in range(1, max_rounds + 1):
         if status_cb:
             status_cb("第 {} 轮：请求大模型…".format(round_no))
         headers = {"Content-Type": "application/json"}
         if api_key:
             headers["Authorization"] = "Bearer " + api_key
-        payload = {"model": model, "messages": messages, "temperature": temperature, "tools": tools}
+        payload = {"model": model, "messages": messages, "temperature": temperature,
+                   "tools": tools(round_no) if callable(tools) else tools}
         response = requests.post(base_url.rstrip("/") + "/chat/completions",
                                  json=payload, headers=headers, timeout=TIMEOUT)
         if response.status_code != 200:
@@ -114,7 +112,7 @@ def chat_with_tools(base_url, api_key, model, messages, temperature, tools, tool
         except (KeyError, IndexError) as e:
             raise RuntimeError("LLM API 响应缺少 choices/message 结构（round {}）: {}".format(round_no, e))
         tool_calls = message.get("tool_calls") or []
-        print("[llm_bridge] agent round {}: finish_reason={} tool_calls={}".format(
+        print("[ComfyUI_Agent] agent round {}: finish_reason={} tool_calls={}".format(
             round_no, choice.get("finish_reason"), len(tool_calls)), flush=True)
         if not tool_calls:
             content = message.get("content") or ""
@@ -142,6 +140,6 @@ def chat_with_tools(base_url, api_key, model, messages, temperature, tools, tool
                     result = "工具执行失败: {}".format(e)
             if not isinstance(result, str):
                 result = json.dumps(result, ensure_ascii=False)
-            print("[llm_bridge] agent round {} tool {}: {}".format(round_no, call_name, str(result)[:120]), flush=True)
+            print("[ComfyUI_Agent] agent round {} tool {}: {}".format(round_no, call_name, str(result)[:120]), flush=True)
             messages.append({"role": "tool", "tool_call_id": t["id"], "content": result[:20000]})
     raise RuntimeError("Agent 超过最大工具轮数（{} 轮）仍未给出最终回复".format(max_rounds))

@@ -1,0 +1,236 @@
+{
+  "id": "5a3e51da-6652-4d07-93a0-e764946ec2d9",
+  "revision": 0,
+  "last_node_id": 2,
+  "last_link_id": 1,
+  "nodes": [
+    {
+      "id": 1,
+      "type": "SystemPromptSelector",
+      "pos": [
+        60,
+        300
+      ],
+      "size": [
+        400,
+        200
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "预设",
+          "name": "preset",
+          "type": "COMBO",
+          "widget": {
+            "name": "preset"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "文本",
+          "name": "text",
+          "type": "STRING",
+          "widget": {
+            "name": "text"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "text",
+          "name": "text",
+          "type": "STRING",
+          "links": [
+            1
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "SystemPromptSelector"
+      },
+      "widgets_values": [
+        "提示词工程师",
+        ""
+      ],
+      "widgets_values_named": {
+        "preset": "提示词工程师",
+        "text": "你是提示词工程师。把用户的想法扩写成一段详细的英文图像提示词，只输出提示词本身，不要任何解释。"
+      }
+    },
+    {
+      "id": 2,
+      "type": "AgentChat",
+      "pos": [
+        560,
+        160
+      ],
+      "size": [
+        400,
+        326
+      ],
+      "flags": {},
+      "order": 1,
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "image1",
+          "name": "images.image1",
+          "shape": 7,
+          "type": "IMAGE",
+          "link": null
+        },
+        {
+          "localized_name": "video1",
+          "name": "videos.video1",
+          "shape": 7,
+          "type": "VIDEO",
+          "link": null
+        },
+        {
+          "localized_name": "audio1",
+          "name": "audios.audio1",
+          "shape": 7,
+          "type": "AUDIO",
+          "link": null
+        },
+        {
+          "localized_name": "新对话",
+          "name": "new_conversation",
+          "shape": 7,
+          "type": "BOOLEAN",
+          "widget": {
+            "name": "new_conversation"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "提示词",
+          "name": "prompt",
+          "shape": 7,
+          "type": "STRING",
+          "widget": {
+            "name": "prompt"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "系统提示词",
+          "name": "system_prompt",
+          "shape": 7,
+          "type": "STRING",
+          "widget": {
+            "name": "system_prompt"
+          },
+          "link": 1
+        },
+        {
+          "localized_name": "技能",
+          "name": "skill",
+          "shape": 7,
+          "type": "COMBO",
+          "widget": {
+            "name": "skill"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "服务商",
+          "name": "provider",
+          "shape": 7,
+          "type": "COMBO",
+          "widget": {
+            "name": "provider"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "工具权限",
+          "name": "permission",
+          "shape": 7,
+          "type": "COMBO",
+          "widget": {
+            "name": "permission"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "温度",
+          "name": "temperature",
+          "shape": 7,
+          "type": "FLOAT",
+          "widget": {
+            "name": "temperature"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "conversation_id",
+          "name": "conversation_id",
+          "shape": 7,
+          "type": "STRING",
+          "widget": {
+            "name": "conversation_id"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "text",
+          "name": "text",
+          "type": "STRING",
+          "links": null
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "AgentChat"
+      },
+      "widgets_values": [
+        false,
+        "一只在雪山之巅看日出的狐狸",
+        "",
+        "deepseek",
+        "询问",
+        0.7,
+        "",
+        ""
+      ],
+      "widgets_values_named": {
+        "new_conversation": false,
+        "prompt": "一只在雪山之巅看日出的狐狸",
+        "system_prompt": "",
+        "skill": "(无)",
+        "provider": "deepseek",
+        "permission": "询问",
+        "temperature": 0.7,
+        "conversation_id": "cb110c0380f46",
+        "ComfyUI_Agent_display": ""
+      }
+    }
+  ],
+  "links": [
+    [
+      1,
+      1,
+      0,
+      2,
+      5,
+      "STRING"
+    ]
+  ],
+  "groups": [],
+  "config": {},
+  "extra": {
+    "ds": {
+      "scale": 0.72,
+      "offset": [
+        66.80000000000001,
+        94.80000000000001
+      ]
+    }
+  },
+  "version": 0.4
+}

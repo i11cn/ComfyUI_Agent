@@ -22,9 +22,6 @@
       "system_prompt": {
         "label": "系统提示词"
       },
-      "skill": {
-        "label": "技能"
-      },
       "provider": {
         "label": "服务商"
       },

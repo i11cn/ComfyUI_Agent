@@ -1,7 +1,7 @@
 """Tool execution for the Agent Loop: read/write/edit files and run bash commands,
 plus the Python (ComfyUI venv) and Node.js (fnm-managed) script runners.
 
-Everything the model may touch lives under the llm_bridge folder;
+Everything the model may touch lives under the ComfyUI_Agent folder;
 bash runs with that folder as cwd. Mutating tools go through the approval
 dialog (request_approval) unless the conversation or mode allows them."""
 import base64
@@ -86,7 +86,7 @@ def request_approval(conversation, tool, detail):
 
 
 def _download(url, target_path):
-    print("[llm_bridge:tools] downloading {} -> {}".format(url, target_path), flush=True)
+    print("[ComfyUI_Agent:tools] downloading {} -> {}".format(url, target_path), flush=True)
     os.makedirs(os.path.dirname(target_path), exist_ok=True)
     tmp = target_path + ".part"
     with urllib.request.urlopen(url, timeout=DOWNLOAD_TIMEOUT) as r, open(tmp, "wb") as f:
@@ -188,7 +188,7 @@ def ensure_node():
     listed = subprocess.run([fnm, "list"], capture_output=True, text=True, env=env, timeout=120)
     have = NODE_VERSION in (listed.stdout or "")
     if not have:
-        print("[llm_bridge:tools] fnm install Node.js {} (FNM_DIR={})".format(NODE_VERSION, FNM_DIR), flush=True)
+        print("[ComfyUI_Agent:tools] fnm install Node.js {} (FNM_DIR={})".format(NODE_VERSION, FNM_DIR), flush=True)
         subprocess.run([fnm, "install", NODE_VERSION], capture_output=True, text=True,
                        env=env, timeout=600, check=True)
     return fnm, NODE_VERSION
