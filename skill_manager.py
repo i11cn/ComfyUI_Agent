@@ -180,23 +180,38 @@ def _rmtree(path):
     shutil.rmtree(path, onerror=onerror)
 
 
+def _discover_skill_dirs(root):
+    """递归找出含 SKILL.md 的技能目录（跳过 .git），返回 {绝对目录: 技能名}。
+    同名目录出现在不同位置时报错——无法以同一个名字同时安装。"""
+    found = {}
+    for base, dirs, files in os.walk(root):
+        dirs[:] = [d for d in dirs if d != ".git"]
+        if "SKILL.md" not in files:
+            continue
+        path = os.path.abspath(base)
+        name = os.path.basename(os.path.normpath(base))
+        if name in found.values():
+            raise ValueError("发现重名技能目录（{}）：无法同时安装 {} 与 {}".format(
+                name, next(p for p, n in found.items() if n == name), os.path.relpath(path, root)))
+        found[path] = name
+    return found
+
+
 def _ingest_source_dir(src_dir, source_meta):
-    """把一个源目录（根含 SKILL.md 的单技能，或多个子目录各含 SKILL.md 的技能包）装进 skills/。"""
-    installed = []
+    """把一个源目录装进 skills/：根含 SKILL.md 为单技能（忽略子目录）；
+    否则递归发现各深度含 SKILL.md 的技能目录（含 .git 的目录跳过）。"""
     if os.path.isfile(os.path.join(src_dir, "SKILL.md")):
-        installed.append(_install_single(src_dir, source_meta))
-    else:
-        for entry in sorted(os.listdir(src_dir)):
-            sub = os.path.join(src_dir, entry)
-            if os.path.isdir(sub) and os.path.isfile(os.path.join(sub, "SKILL.md")):
-                installed.append(_install_single(sub, source_meta))
+        return [_install_single(src_dir, source_meta)]
+    installed = []
+    for d, name in sorted(_discover_skill_dirs(src_dir).items()):
+        installed.append(_install_single(d, source_meta, name))
     if not installed:
         raise ValueError("来源里没有找到任何包含 SKILL.md 的技能目录")
     return installed
 
 
-def _install_single(src_dir, source_meta):
-    name = _safe_name(os.path.basename(os.path.normpath(src_dir)))
+def _install_single(src_dir, source_meta, name=None):
+    name = _safe_name(name or os.path.basename(os.path.normpath(src_dir)))
     dest = os.path.join(SKILLS_DIR, name)
     if os.path.exists(dest):
         raise ValueError("技能已存在: {}（先删除或改名后再安装）".format(name))
@@ -233,40 +248,89 @@ def install_skill(data):
             _safe_extract(zip_path, td)
             return _ingest_source_dir(td, {"type": "zip_url", "url": source})
     if kind == "git":
-        if not source.lower().startswith(("http://", "https://", "git@")):
-            raise ValueError("Git 来源应是仓库地址")
-        name = _url_repo_name(source)
-        dest = os.path.join(SKILLS_DIR, name)
-        if os.path.exists(dest):
-            raise ValueError("技能已存在: {}（先删除或改名后再安装）".format(name))
-        # 单技能仓库直接把克隆放进 skills/<名字>/，.git 原生保留，更新走原地增量拉取
-        _git_clone(source, dest)
-        if os.path.isfile(os.path.join(dest, "SKILL.md")):
+        if not source.lower().startswith(("http://", "https://", "git@", "file://")):
+            raise ValueError("Git 来源应是仓库地址（http/https/git@）")
+        # 地址可以是仓库根，也可以是仓库内的子路径：逐级向上探测真正的仓库根，
+        # 整个仓库只克隆一次进 .repos 缓存（键 = 仓库根地址的哈希），同仓库共享；
+        # 带子路径时只导入该子路径下的技能。
+        root_url, subpath = _resolve_repo_root(source)
+        cache_rel = os.path.join(".repos", _url_hash(root_url))
+        cache = os.path.join(SKILLS_DIR, cache_rel)
+        if os.path.isdir(os.path.join(cache, ".git")):
+            _git_update_cache(cache_rel)  # 同仓库已装过其它技能：复用缓存，增量拉取
+        else:
+            td = tempfile.mkdtemp()
+            try:
+                clone_into = os.path.join(td, "repo")
+                _git_clone(root_url, clone_into)
+                os.makedirs(os.path.dirname(cache), exist_ok=True)
+                if os.path.exists(cache):
+                    _rmtree(cache)
+                shutil.move(clone_into, cache)
+            finally:
+                shutil.rmtree(td, ignore_errors=True)
+        discovered_all = _discover_skill_dirs(cache)
+        if subpath:
+            prefix = os.path.normpath(os.path.join(cache, subpath))
+            discovered = {}
+            for p, n in discovered_all.items():
+                try:
+                    if os.path.commonpath([p, prefix]) == prefix:
+                        discovered[p] = n
+                except ValueError:
+                    pass
+            if not discovered:
+                raise ValueError("指定子路径下没有找到技能: " + subpath)
+        else:
+            discovered = discovered_all
+        # 单技能仓库（根含 SKILL.md 且仓库里只有这一个技能）：整体挪为技能目录，原地增量更新
+        if not subpath and len(discovered) == 1 and os.path.isfile(os.path.join(cache, "SKILL.md")):
+            name = _url_repo_name(root_url)
+            dest = os.path.join(SKILLS_DIR, name)
+            if os.path.exists(dest):
+                raise ValueError("技能已存在: {}（先删除或改名后再安装）".format(name))
+            shutil.move(cache, dest)
             state = _load_state()
-            state[name] = {"enabled": True, "source": {"type": "git", "url": source, "mode": "inplace"}}
+            state[name] = {"enabled": True, "source": {"type": "git", "url": root_url, "mode": "inplace"}}
             _save_state(state)
             return [name]
-        # 多技能仓库：仓库本体进 .repos 缓存（保留 .git），各技能为子目录拷贝
-        cache_rel = os.path.join(".repos", _url_hash(source))
-        cache = os.path.join(SKILLS_DIR, cache_rel)
-        os.makedirs(os.path.dirname(cache), exist_ok=True)
-        if os.path.exists(cache):
-            shutil.rmtree(cache)
-        shutil.move(dest, cache)
         installed = []
-        for entry in sorted(os.listdir(cache)):
-            sub = os.path.join(cache, entry)
-            if os.path.isdir(sub) and os.path.isfile(os.path.join(sub, "SKILL.md")):
-                installed.append(_install_single(sub, {"type": "git", "url": source, "cache": cache_rel}))
+        for d, name in sorted(discovered.items()):
+            installed.append(_install_single(d, {"type": "git", "url": root_url, "cache": cache_rel}, name))
         if not installed:
             raise ValueError("来源里没有找到任何包含 SKILL.md 的技能目录")
         return installed
     raise ValueError("未知安装类型: " + kind)
 
 
+def _git_candidates(url):
+    """从用户地址生成候选仓库根：原始地址在前，逐级向上剥路径（至少保留 2 段）。"""
+    url = url.rstrip("/")
+    candidates = [url]
+    if "://" in url:
+        scheme, rest = url.split("://", 1)
+    else:  # git@host:owner/repo/...
+        scheme, rest = url.split(":", 1)
+    segments = rest.split("/")
+    for i in range(len(segments) - 1, 1, -1):
+        candidates.append(scheme + "://" + "/".join(segments[:i]) if "://" in url
+                          else scheme + ":" + "/".join(segments[:i]))
+    return candidates
+
+
+def _resolve_repo_root(url):
+    """探测可克隆的仓库根（子路径无法直接克隆）：返回 (仓库根地址, 相对子路径)。"""
+    for candidate in _git_candidates(url):
+        probe = _run_git(["ls-remote", "--heads", candidate])
+        if probe.returncode == 0:
+            subpath = url[len(candidate):].lstrip("/") if url.startswith(candidate) else ""
+            return candidate.rstrip("/"), subpath
+    raise ValueError("无法从地址定位 Git 仓库（已逐级向上尝试）。请确认地址指向一个可访问的 Git 仓库或其内部路径")
+
+
 def _url_repo_name(url):
     base = url.rstrip("/")
-    if "@" in base and "://" not in base:  # git@host:path/repo.git 形态
+    if "@" in base and "://" not in base:  # git@host:owner/repo.git 形态
         base = base.split(":", 1)[1]
     name = os.path.basename(base)
     if name.endswith(".git"):
@@ -331,14 +395,8 @@ def update_skill(name):
             return
         if source.get("cache"):
             cache = _git_update_cache(source["cache"])
-            candidates = [os.path.join(cache, name)] if os.path.isdir(os.path.join(cache, name)) else []
-            if not candidates and os.path.isfile(os.path.join(cache, "SKILL.md")):
-                candidates = [cache]
-            for entry in sorted(os.listdir(cache)):
-                sub = os.path.join(cache, entry)
-                if os.path.isdir(sub) and os.path.isfile(os.path.join(sub, "SKILL.md")):
-                    candidates.append(sub)
-            picked = next((c for c in candidates if os.path.basename(os.path.normpath(c)) == name), candidates[0] if candidates else None)
+            discovered = _discover_skill_dirs(cache)
+            picked = next((p for p, n in discovered.items() if n == name), None)
             if picked is None:
                 raise ValueError("来源里没有找到 SKILL.md，无法更新")
             _rmtree(d)

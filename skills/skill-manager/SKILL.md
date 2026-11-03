@@ -47,7 +47,7 @@ python skills/skill-manager/scripts/cli.py delete --name <技能名>
 - **单技能仓库**（根目录含 SKILL.md）：直接 `git clone --depth 1` 到 `skills/<仓库名>/`，`.git` 保留在里面。之后更新走原地增量拉取（见"更新"）。
 - **多技能仓库**（根目录无 SKILL.md）：**克隆和复制两步**——
   1. 克隆仓库本体到 `skills/.repos/<sha1(url)前12位>/`（含 .git）；
-  2. 把每个含 SKILL.md 的子目录拷贝到 `skills/<子目录名>/`。
+  2. 递归发现任意深度含 SKILL.md 的子目录（跳过 .git），逐一拷贝到 `skills/<子目录名>/`。不同位置出现同名技能目录时会报错，需让用户取舍。
 - 克隆固定 `--depth 1` 且 `GIT_TERMINAL_PROMPT=0`：私有仓库会直接报错而不是挂起等待输入。
 - 若克隆后既没有根 SKILL.md 也没有任何含 SKILL.md 的子目录，如实告知用户该仓库不是技能仓库。
 
