@@ -655,6 +655,7 @@ function openSkillsDialog() {
             const nameEl = document.createElement('div');
             nameEl.textContent = s.name;
             nameEl.style.cssText = 'font-size:13px;font-weight:600;flex:none;';
+            head.append(nameEl);
             const badge = (text, dim) => {
                 const b = document.createElement('span');
                 b.textContent = text;
