@@ -7,6 +7,8 @@ from typing_extensions import override
 
 from .agent_loop import audio_to_content_part, chat, chat_with_tools, frames_to_data_urls, image_to_data_url
 from . import tools as llm_tools
+from . import skill_manager
+from .skill_manager import skill_description
 
 FOLDER = os.path.dirname(os.path.abspath(__file__))
 CONFIG_FILE = os.path.join(FOLDER, "config.json")
@@ -85,7 +87,8 @@ def list_skills():
     if not os.path.isdir(SKILLS_DIR):
         return []
     return sorted(n for n in os.listdir(SKILLS_DIR)
-                  if os.path.isfile(os.path.join(SKILLS_DIR, n, "SKILL.md")))
+                  if os.path.isfile(os.path.join(SKILLS_DIR, n, "SKILL.md"))
+                  and skill_manager.is_enabled(n))
 
 
 def _read_json_file(path):
@@ -218,6 +221,8 @@ def load_skill(name):
     root = os.path.realpath(os.path.join(SKILLS_DIR, name))
     if os.path.commonpath([root, os.path.realpath(SKILLS_DIR)]) != os.path.realpath(SKILLS_DIR):
         raise ValueError("未知技能: " + name)
+    if not skill_manager.is_enabled(name):
+        raise ValueError("技能已停用: " + name)
     with open(os.path.join(root, "SKILL.md"), "r", encoding="utf-8") as f:
         parts = [f.read()]
     ref = os.path.join(root, "references")
@@ -231,22 +236,6 @@ def load_skill(name):
                     with open(path, "r", encoding="utf-8") as f:
                         parts.append("=== reference: {} ===\n{}".format(rel, f.read()))
     return "\n\n".join(parts)
-
-
-def skill_description(name):
-    """One-line blurb for auto routing: SKILL.md frontmatter description or the body head."""
-    with open(os.path.join(SKILLS_DIR, name, "SKILL.md"), "r", encoding="utf-8") as f:
-        text = f.read()
-    body = text
-    if text.startswith("---"):
-        head, sep, rest = text[3:].partition("---")
-        if sep:
-            body = rest
-            for line in head.splitlines():
-                if line.lower().startswith("description:"):
-                    return line.split(":", 1)[1].strip()
-    lines = [ln.strip() for ln in body.splitlines() if ln.strip() and not ln.lstrip().startswith("#")]
-    return " ".join(lines)[:200]
 
 
 def skill_catalog():

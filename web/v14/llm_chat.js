@@ -138,12 +138,17 @@ app.registerExtension({
             infoRow.style.cssText = "display:flex;align-items:center;justify-content:space-between;";
             const info = document.createElement("div");
             info.style.cssText = "font-size:10px;opacity:0.75;padding:2px 6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;min-width:0;";
+            const skillGear = document.createElement("div");
+            skillGear.textContent = "⚙ 技能";
+            skillGear.title = "管理技能：安装（本地/zip/直链/Git）、启停、更新、删除";
+            skillGear.style.cssText = "font-size:10px;opacity:0.65;cursor:pointer;padding:2px 6px;flex:none;user-select:none;";
+            skillGear.onclick = () => openSkillsDialog();
             const gear = document.createElement("div");
             gear.textContent = "⚙ 服务商";
             gear.title = "管理服务商（config.json）：增删改、设默认";
             gear.style.cssText = "font-size:10px;opacity:0.65;cursor:pointer;padding:2px 6px;flex:none;user-select:none;";
             gear.onclick = () => openProviderDialog();
-            infoRow.append(info, gear);
+            infoRow.append(info, skillGear, gear);
             const head = document.createElement("div");
             head.className = "llm-bridge-head";
             head.style.cssText = "font-size:10px;opacity:0.6;padding:2px 6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;";
@@ -560,4 +565,179 @@ function openPromptsDialog() {
             document.body.append(backdrop);
         })
         .catch((e) => alert('读取系统提示词失败: ' + e));
+}
+
+// ---- 技能管理：清单 + 安装（本地/zip/直链/Git）+ 启停 + 更新 + 删除 ----
+function openSkillsDialog() {
+    const backdrop = document.createElement('div');
+    backdrop.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:99999;display:flex;align-items:center;justify-content:center;';
+    const panel = document.createElement('div');
+    panel.style.cssText = 'background:#1e1e24;color:#e8e8ea;border:1px solid #444;border-radius:10px;padding:16px 18px;width:820px;max-width:94vw;height:86vh;display:flex;flex-direction:column;font-family:sans-serif;box-shadow:0 8px 40px rgba(0,0,0,0.6);';
+    const titleRow = document.createElement('div');
+    titleRow.style.cssText = 'display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;';
+    const title = document.createElement('div');
+    title.textContent = '技能管理（skills 目录）';
+    title.style.cssText = 'font-size:15px;font-weight:600;';
+    const close = document.createElement('div');
+    close.textContent = '✕';
+    close.style.cssText = 'cursor:pointer;opacity:0.7;font-size:14px;padding:2px 6px;';
+    close.onclick = () => backdrop.remove();
+    titleRow.append(title, close);
+    const hint = document.createElement('div');
+    hint.style.cssText = 'font-size:11px;opacity:0.65;margin-bottom:8px;line-height:1.5;';
+    hint.textContent = '技能 = 含 SKILL.md 的文件夹。停用后模型看不到也无法加载。安装来源：本地文件夹、zip 文件、zip 下载直链、Git 仓库地址（多技能包会全部导入）；带来源信息的技能可一键更新。';
+    // 安装区
+    const installRow = document.createElement('div');
+    installRow.style.cssText = 'display:flex;gap:6px;margin-bottom:10px;';
+    const typeSelect = document.createElement('select');
+    typeSelect.style.cssText = 'background:#141418;color:#e8e8ea;border:1px solid #444;border-radius:4px;padding:5px 6px;font-size:12px;';
+    const placeholders = {
+        local: '输入本地技能文件夹路径，如 D:\\my_skills\\fox-draw',
+        zip: '输入 zip 文件路径，如 D:\\downloads\\fox-draw.zip',
+        zip_url: '输入 zip 下载直链（http/https）',
+        git: '输入 Git 仓库地址（https://github.com/... 或 git@...）',
+    };
+    for (const [v, label] of [['local', '本地文件夹'], ['zip', 'zip 文件'], ['zip_url', 'zip 直链'], ['git', 'Git 仓库']]) {
+        const opt = document.createElement('option');
+        opt.value = v;
+        opt.textContent = label;
+        typeSelect.append(opt);
+    }
+    const srcInput = document.createElement('input');
+    srcInput.placeholder = placeholders.local;
+    srcInput.style.cssText = 'flex:1;background:#141418;color:#e8e8ea;border:1px solid #444;border-radius:4px;padding:5px 8px;font-size:12px;min-width:0;';
+    typeSelect.onchange = () => { srcInput.placeholder = placeholders[typeSelect.value]; };
+    const installBtn = document.createElement('button');
+    installBtn.textContent = '安装';
+    installBtn.style.cssText = 'padding:5px 14px;border-radius:6px;border:1px solid #3b82f6;background:#3b82f6;color:#fff;cursor:pointer;font-size:12px;';
+    installRow.append(typeSelect, srcInput, installBtn);
+    // 清单区
+    const list = document.createElement('div');
+    list.style.cssText = 'overflow-y:auto;min-height:0;flex:1;';
+    const errLine = document.createElement('div');
+    errLine.style.cssText = 'font-size:11px;color:#f87171;min-height:15px;margin-top:6px;';
+    const footer = document.createElement('div');
+    footer.style.cssText = 'display:flex;justify-content:flex-end;margin-top:4px;';
+    const closeBtn = document.createElement('button');
+    closeBtn.textContent = '关闭';
+    closeBtn.style.cssText = 'padding:6px 14px;border-radius:6px;border:1px solid #555;background:#2a2a30;color:#ddd;cursor:pointer;font-size:12px;';
+    closeBtn.onclick = () => backdrop.remove();
+    footer.append(closeBtn);
+    panel.append(titleRow, hint, installRow, list, errLine, footer);
+    backdrop.append(panel);
+    document.body.append(backdrop);
+
+    const post = async (path, body) => {
+        const resp = await fetch('/ComfyUI_Agent/skills/' + path, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+        });
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.error || ('HTTP ' + resp.status));
+        return data;
+    };
+
+    const render = (skills) => {
+        list.textContent = '';
+        if (!skills.length) {
+            const empty = document.createElement('div');
+            empty.textContent = '还没有安装任何技能。';
+            empty.style.cssText = 'font-size:12px;opacity:0.6;padding:12px 4px;';
+            list.append(empty);
+            return;
+        }
+        for (const s of skills) {
+            const row = document.createElement('div');
+            row.style.cssText = 'border:1px solid #333;border-radius:6px;padding:8px 10px;margin-bottom:8px;';
+            const head = document.createElement('div');
+            head.style.cssText = 'display:flex;align-items:center;gap:8px;';
+            const nameEl = document.createElement('div');
+            nameEl.textContent = s.name;
+            nameEl.style.cssText = 'font-size:13px;font-weight:600;flex:none;';
+            const badge = (text, dim) => {
+                const b = document.createElement('span');
+                b.textContent = text;
+                b.style.cssText = 'font-size:10px;border:1px solid #555;border-radius:3px;padding:1px 5px;opacity:' + (dim ? '0.45' : '0.8') + ';';
+                return b;
+            };
+            if (s.has_scripts) head.append(badge('脚本'));
+            if (!s.enabled) head.append(badge('已停用', true));
+            const space = document.createElement('div');
+            space.style.cssText = 'flex:1;';
+            head.append(space);
+            const mkBtn = (label, color, fn, disable) => {
+                const b = document.createElement('button');
+                b.textContent = label;
+                b.style.cssText = 'padding:2px 10px;border-radius:4px;border:1px solid #555;background:#2a2a30;color:' + (color || '#ddd') + ';cursor:pointer;font-size:11px;' + (disable ? 'opacity:0.4;cursor:default;' : '');
+                if (!disable && fn) b.onclick = fn;
+                return b;
+            };
+            if (s.source) {
+                head.append(mkBtn('更新', '#7aa2f7', async () => {
+                    errLine.textContent = '';
+                    try {
+                        render((await post('update', { name: s.name })).skills);
+                    } catch (e) { errLine.textContent = '更新失败: ' + e.message; }
+                }));
+            } else {
+                head.append(mkBtn('更新', null, null, true));
+            }
+            head.append(mkBtn(s.enabled ? '停用' : '启用', '#e5c07b', async () => {
+                errLine.textContent = '';
+                try {
+                    render((await post('toggle', { name: s.name, enabled: !s.enabled })).skills);
+                } catch (e) { errLine.textContent = '操作失败: ' + e.message; }
+            }));
+            const delBtn = mkBtn('删除', '#f87171', async () => {
+                errLine.textContent = '';
+                if (delBtn.textContent !== '确认删除？') {
+                    delBtn.textContent = '确认删除？';
+                    delBtn.style.borderColor = '#f87171';
+                    setTimeout(() => { delBtn.textContent = '删除'; delBtn.style.borderColor = '#555'; }, 3000);
+                    return;
+                }
+                try {
+                    render((await post('delete', { name: s.name })).skills);
+                } catch (e) { errLine.textContent = '删除失败: ' + e.message; }
+            });
+            head.append(delBtn);
+            const desc = document.createElement('div');
+            desc.textContent = s.description || '（无简介）';
+            desc.title = s.description || '';
+            desc.style.cssText = 'font-size:11px;opacity:0.65;margin-top:4px;line-height:1.4;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;' + (s.enabled ? '' : 'text-decoration:line-through;');
+            const srcLine = document.createElement('div');
+            srcLine.style.cssText = 'font-size:10px;opacity:0.45;margin-top:3px;';
+            if (s.source) {
+                const detail = s.source.type === 'git' || s.source.type === 'zip_url' ? s.source.url : s.source.path;
+                srcLine.textContent = '来源: ' + s.source.type + ' · ' + detail;
+            }
+            row.append(head, desc, srcLine);
+            list.append(row);
+        }
+    };
+
+    installBtn.onclick = async () => {
+        errLine.textContent = '';
+        installBtn.disabled = true;
+        installBtn.textContent = '安装中…';
+        try {
+            const data = await post('install', { type: typeSelect.value, source: srcInput.value.trim() });
+            srcInput.value = '';
+            render(data.skills);
+            errLine.style.color = '#4ade80';
+            errLine.textContent = '已安装: ' + data.installed.join('、');
+            setTimeout(() => { errLine.textContent = ''; errLine.style.color = '#f87171'; }, 4000);
+        } catch (e) {
+            errLine.textContent = '安装失败: ' + e.message;
+        } finally {
+            installBtn.disabled = false;
+            installBtn.textContent = '安装';
+        }
+    };
+
+    fetch('/ComfyUI_Agent/skills')
+        .then((r) => r.json())
+        .then((data) => render(data.skills || []))
+        .catch((e) => alert('读取技能列表失败: ' + e));
 }

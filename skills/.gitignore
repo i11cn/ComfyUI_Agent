@@ -1,2 +1,4 @@
 *
 !.gitignore
+!skill-manager/
+!skill-manager/**
