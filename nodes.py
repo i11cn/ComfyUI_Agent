@@ -286,9 +286,9 @@ class LLMChat(io.ComfyNode):
             inputs=[
                 io.Boolean.Input("new_conversation", default=False, optional=True, display_name="新对话",
                                  tooltip="Run once to start a new conversation: a fresh conversation_id is generated and filled in, and this switch resets to false afterwards."),
-                io.String.Input("prompt", multiline=True, dynamic_prompts=True, default="", optional=True, display_name="提示词",
+                io.String.Input("prompt", multiline=True, default="", optional=True, display_name="提示词",
                                 tooltip="This round's instruction or question."),
-                io.String.Input("system_prompt", multiline=True, dynamic_prompts=True, default="", optional=True, display_name="系统提示词",
+                io.String.Input("system_prompt", multiline=True, default="", optional=True, display_name="系统提示词",
                                 tooltip="Sent once as the system message, e.g. 'You are a prompt engineer. Rewrite the user's idea as one detailed English prompt.'"),
                 io.Combo.Input("provider", options=list(providers) or ["(无)"], default=config.get("default", ""), optional=True, display_name="服务商",
                                tooltip="服务供应商，选项来自 config.json 的 providers 各条目的名字；base_url、api_key、model 全部由该条目决定。修改 config.json 后刷新页面可更新列表。",
