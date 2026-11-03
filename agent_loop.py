@@ -1,6 +1,7 @@
 import base64
 import io
 import json
+import time
 import wave
 
 import numpy as np
@@ -12,6 +13,35 @@ TIMEOUT = 300
 VIDEO_FRAMES_PER_VIDEO = 4
 MAX_IMAGE_SIDE = 1568  # VLM 友好的长边上限，超过则等比缩小
 JPEG_QUALITY = 88
+
+# 服务端过载/限流（429、5xx）与网络抖动自动重试：最多 4 次尝试
+RETRY_STATUSES = {429, 500, 502, 503, 504}
+RETRY_DELAYS = (2, 5, 10)
+
+
+def _post_with_retry(url, payload, headers, status_cb=None, what="请求大模型"):
+    """发送对话请求；429/5xx/网络抖动按 RETRY_DELAYS 退避重试。
+    HTTP 耗尽后返回最后一次响应（调用方报详细错误）；网络异常耗尽后直接抛错。"""
+    last_error = None
+    for attempt in range(len(RETRY_DELAYS) + 1):
+        try:
+            response = requests.post(url, json=payload, headers=headers, timeout=TIMEOUT)
+        except requests.exceptions.RequestException as e:
+            if attempt >= len(RETRY_DELAYS):
+                raise RuntimeError("{}在自动重试（{} 次）后仍失败: {}".format(
+                    what, len(RETRY_DELAYS) + 1, str(e)[:200]))
+            last_error = str(e)
+            delay = RETRY_DELAYS[attempt]
+        else:
+            if response.status_code not in RETRY_STATUSES or attempt >= len(RETRY_DELAYS):
+                return response
+            last_error = "HTTP {}: {}".format(response.status_code, response.text[:200])
+            delay = RETRY_DELAYS[attempt]
+        print("[ComfyUI_Agent] {}失败（{}），{} 秒后自动重试（第 {}/{} 次）".format(
+            what, last_error[:120], delay, attempt + 1, len(RETRY_DELAYS)), flush=True)
+        if status_cb:
+            status_cb("{}失败（服务繁忙或网络抖动），{} 秒后自动重试…".format(what, delay))
+        time.sleep(delay)
 
 
 def image_to_data_url(frame):
@@ -55,11 +85,10 @@ def chat(base_url, api_key, model, messages, temperature, status_cb=None):
     headers = {"Content-Type": "application/json"}
     if api_key:
         headers["Authorization"] = "Bearer " + api_key
-    response = requests.post(
+    response = _post_with_retry(
         base_url.rstrip("/") + "/chat/completions",
-        json={"model": model, "messages": messages, "temperature": temperature},
-        headers=headers,
-        timeout=TIMEOUT,
+        {"model": model, "messages": messages, "temperature": temperature},
+        headers, status_cb=status_cb,
     )
     if response.status_code != 200:
         raise RuntimeError("LLM API error {}: {}（endpoint={}, model={}）".format(
@@ -97,8 +126,8 @@ def chat_with_tools(base_url, api_key, model, messages, temperature, tools, tool
             headers["Authorization"] = "Bearer " + api_key
         payload = {"model": model, "messages": messages, "temperature": temperature,
                    "tools": tools(round_no) if callable(tools) else tools}
-        response = requests.post(base_url.rstrip("/") + "/chat/completions",
-                                 json=payload, headers=headers, timeout=TIMEOUT)
+        response = _post_with_retry(base_url.rstrip("/") + "/chat/completions", payload, headers,
+                                    status_cb=status_cb, what="第 {} 轮请求".format(round_no))
         if response.status_code != 200:
             raise RuntimeError("LLM API error (round {}) {}: {}（endpoint={}, model={}）".format(
                 round_no, response.status_code, response.text[:500], base_url, model))
